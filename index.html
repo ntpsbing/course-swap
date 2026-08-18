@@ -386,14 +386,18 @@
                                         <div class="font-semibold text-slate-700" x-text="item.targetSubject"></div>
                                     </td>
                                     <td class="p-4 text-center">
-                                        <span class="px-2.5 py-1 rounded-full text-xs font-bold inline-block"
-                                              :class="{
-                                                'bg-amber-100 text-amber-800 border border-amber-300': item.status === '雙方已講好',
-                                                'bg-blue-100 text-blue-800 border border-blue-300': item.status === '教務處審核中',
-                                                'bg-emerald-100 text-emerald-800 border border-emerald-300': item.status === '已完成調課'
-                                              }"
-                                              x-text="item.status">
-                                        </span>
+                                        <select @change="updateStatus(item, $event.target.value)" 
+                                                :value="item.status"
+                                                class="text-xs font-bold px-2.5 py-1 rounded-full border cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm transition"
+                                                :class="{
+                                                    'bg-amber-100 text-amber-800 border-amber-300': item.status === '雙方已講好',
+                                                    'bg-blue-100 text-blue-800 border-blue-300': item.status === '教務處審核中',
+                                                    'bg-emerald-100 text-emerald-800 border-emerald-300': item.status === '已完成調課'
+                                                }">
+                                            <option value="雙方已講好">雙方已講好</option>
+                                            <option value="教務處審核中">教務處審核中</option>
+                                            <option value="已完成調課">已完成調課</option>
+                                        </select>
                                     </td>
                                     <td class="p-4 text-center">
                                         <div class="flex items-center justify-center space-x-1">
@@ -435,9 +439,21 @@
             </div>
 
             <div class="p-6 overflow-y-auto space-y-5" x-show="selectedItem">
-                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex justify-between items-center text-xs">
-                    <span class="text-slate-500">申請單編號：<strong class="text-slate-800" x-text="'#' + (selectedItem?.id || '')"></strong></span>
-                    <span class="text-slate-500">填表日期：<strong class="text-slate-800" x-text="selectedItem?.createdAt || ''"></strong></span>
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center text-xs gap-2">
+                    <div>
+                        <span class="text-slate-500">申請單編號：<strong class="text-slate-800" x-text="'#' + (selectedItem?.id || '')"></strong></span>
+                        <span class="text-slate-500 ml-3">填表日期：<strong class="text-slate-800" x-text="selectedItem?.createdAt || ''"></strong></span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-slate-600 font-bold">調課狀態：</span>
+                        <select @change="updateStatus(selectedItem, $event.target.value)" 
+                                :value="selectedItem?.status"
+                                class="text-xs font-bold px-2.5 py-1 rounded-lg border border-slate-300 bg-white focus:ring-2 focus:ring-indigo-500">
+                            <option value="雙方已講好">雙方已講好 (待送教務處)</option>
+                            <option value="教務處審核中">教務處審核中</option>
+                            <option value="已完成調課">已完成調課核備</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div class="border border-emerald-200 bg-emerald-50/30 rounded-xl p-4 text-sm space-y-3">
@@ -731,6 +747,32 @@
 
                 saveToLocalStorage() {
                     localStorage.setItem('teacher_swap_records_v1', JSON.stringify(this.records));
+                },
+
+                async updateStatus(item, newStatus) {
+                    if (!item || !newStatus) return;
+                    const oldStatus = item.status;
+                    item.status = newStatus;
+
+                    if (this.isCloudSync && this.db) {
+                        try {
+                            const { doc, updateDoc } = window.FirebaseSDK;
+                            const docRef = doc(this.db, 'teacher_swap_records', item.id);
+                            await updateDoc(docRef, { status: newStatus });
+                            this.showToast(`調課狀態已成功更換為：「${newStatus}」`, 'success');
+                        } catch(e) {
+                            console.error("Update status failed", e);
+                            item.status = oldStatus;
+                            this.showToast('狀態更新失敗，請檢查權限或網路連線', 'error');
+                        }
+                    } else {
+                        const idx = this.records.findIndex(r => r.id === item.id);
+                        if (idx !== -1) {
+                            this.records[idx].status = newStatus;
+                            this.saveToLocalStorage();
+                            this.showToast(`調課狀態已更換為：「${newStatus}」`, 'success');
+                        }
+                    }
                 },
 
                 async saveRecord() {
