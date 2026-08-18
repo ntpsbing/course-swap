@@ -49,13 +49,13 @@
                 <div>
                     <div class="flex items-center gap-2">
                         <h1 class="text-xl sm:text-2xl font-bold tracking-wide">新學年教師互相調課登記系統</h1>
-                        <span x-show="isCloudSync" class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 flex items-center gap-1">
+                        <span x-show="isCloudSync" @click="showSyncHelp()" class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 flex items-center gap-1 cursor-pointer hover:bg-emerald-500/30 transition">
                             <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                             <span>雲端即時同步中</span>
                         </span>
-                        <span x-show="!isCloudSync" class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/20 text-amber-200 border border-amber-400/30 flex items-center gap-1">
+                        <span x-show="!isCloudSync" @click="showSyncHelp()" class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/20 text-amber-200 border border-amber-400/30 flex items-center gap-1 cursor-pointer hover:bg-amber-500/30 transition" title="點擊查看雲端設定說明">
                             <span class="w-2 h-2 rounded-full bg-amber-400"></span>
-                            <span>單機離線模式</span>
+                            <span>單機離線模式 (點擊自我診斷)</span>
                         </span>
                     </div>
                     <p class="text-xs text-indigo-200">教務處排課後自協調課登記與管理</p>
@@ -619,6 +619,7 @@
                 toasts: [],
                 isCloudSync: false,
                 db: null,
+                syncErrorReason: '',
 
                 // 若要自動同步至 Google 試算表，請填入 Apps Script Web App 網址：
                 googleSheetUrl: "",
@@ -674,17 +675,24 @@
                 },
 
                 async initData() {
-                    // 💡 可將您的 Firebase 金鑰貼至此處：
+                    // 💡 請將您的 Firebase 金鑰貼至 customFirebaseConfig 變數中：
                     const customFirebaseConfig = {
-  				apiKey: "AIzaSyAJzQmeIua1jCs2v7Rvg4LnWYU52-tHFIo",
-  				authDomain: "school-swap-system.firebaseapp.com",
-  				projectId: "school-swap-system",
-  				storageBucket: "school-swap-system.firebasestorage.app",
-  				messagingSenderId: "894518845264",
-  				appId: "1:894518845264:web:3c95d18f9c73989d789655",
-  				measurementId: "G-KXKK3HM0BF"
-				};
+  apiKey: "AIzaSyAJzQmeIua1jCs2v7Rvg4LnWYU52-tHFIo",
+  authDomain: "school-swap-system.firebaseapp.com",
+  projectId: "school-swap-system",
+  storageBucket: "school-swap-system.firebasestorage.app",
+  messagingSenderId: "894518845264",
+  appId: "1:894518845264:web:3c95d18f9c73989d789655",
+  measurementId: "G-KXKK3HM0BF"
+};
                     const configToUse = customFirebaseConfig || (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null);
+
+                    if (!configToUse) {
+                        this.syncErrorReason = "未貼入 customFirebaseConfig 金鑰設定（目前的 customFirebaseConfig 為 null）";
+                        console.info("💡 Firebase 未設定，進入單機離線儲存模式。");
+                        this.initLocalStorage();
+                        return;
+                    }
 
                     if (configToUse && window.FirebaseSDK) {
                         try {
@@ -693,8 +701,10 @@
                             const auth = getAuth(app);
                             this.db = getFirestore(app);
 
+                            // 嘗試進行匿名身份驗證
                             await signInAnonymously(auth);
                             this.isCloudSync = true;
+                            this.syncErrorReason = "";
 
                             const recordsCollection = collection(this.db, 'teacher_swap_records');
 
@@ -705,16 +715,29 @@
                                 }));
                                 this.records = cloudRecords.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
                             }, (err) => {
-                                console.error("Firestore sync error", err);
+                                console.error("Firestore sync error:", err);
+                                this.syncErrorReason = "Firestore 安全規則 (Security Rules) 拒絕讀寫，或資料庫尚未建立： " + err.message;
                                 this.initLocalStorage();
                             });
                             return;
                         } catch (e) {
-                            console.error("Firebase init failed", e);
+                            console.error("Firebase Auth failed:", e);
+                            this.syncErrorReason = "Firebase 驗證失敗！請確認 Firebase 後台 Authentication 是否已開啟「匿名登入 (Anonymous)」：" + e.message;
                         }
+                    } else {
+                        this.syncErrorReason = "Firebase SDK 載入失敗（請檢查網路連線）";
                     }
 
                     this.initLocalStorage();
+                },
+
+                showSyncHelp() {
+                    if (this.isCloudSync) {
+                        alert("🟢 雲端即時同步中：目前已成功連線至 Firebase 雲端資料庫，任何裝置的新增/修改將於 1 秒內同步刷新！");
+                    } else {
+                        let msg = "🟡 目前處於單機離線模式\n\n原因診斷：\n" + (this.syncErrorReason || "尚未完成 Firebase 設定") + "\n\n要開啟跨裝置同步，請確認：\n1. index.html 中有貼上 customFirebaseConfig 金鑰。\n2. Firebase 後台 -> Authentication 已啟用「匿名 (Anonymous)」登入。\n3. Firebase 後台 -> Firestore Database 已建立並設置允許讀寫規則。";
+                        alert(msg);
+                    }
                 },
 
                 initLocalStorage() {
