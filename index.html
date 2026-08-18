@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>新學年教師互相調課登記與管理系統</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Alpine.js for lightweight interactivity -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    <!-- Firebase Web SDK (v11) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Expose Firebase SDK to Alpine.js window scope safely
+        window.FirebaseSDK = {
+            initializeApp, getAuth, signInAnonymously,
+            getFirestore, collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot
+        };
+    </script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;600;700&display=swap');
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #f8fafc;
+        }
+        @media print {
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            body { background: white; }
+        }
+        .print-only { display: none; }
+    </style>
+</head>
+<body class="text-slate-800 flex flex-col min-h-screen" x-data="swapApp()" x-init="initData()">
+
+    <!-- Top Header -->
+    <header class="bg-indigo-700 text-white shadow-lg no-print sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row justify-between items-center gap-3">
+            <div class="flex items-center space-x-3">
+                <div class="bg-indigo-600 p-2.5 rounded-xl shadow-inner border border-indigo-400/30">
+                    <i class="fa-solid font-bold fa-calendar-days text-2xl text-amber-300"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-xl sm:text-2xl font-bold tracking-wide">新學年教師互相調課登記系統</h1>
+                        <span x-show="isCloudSync" class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 flex items-center gap-1">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                            <span>雲端即時同步中</span>
+                        </span>
+                        <span x-show="!isCloudSync" class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/20 text-amber-200 border border-amber-400/30 flex items-center gap-1">
+                            <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                            <span>單機離線模式</span>
+                        </span>
+                    </div>
+                    <p class="text-xs text-indigo-200">教務處排課後自協調課登記與電子通知</p>
+                </div>
+            </div>
+            <!-- Navigation Tabs -->
+            <div class="flex bg-indigo-800/60 p-1 rounded-xl text-sm font-medium border border-indigo-500/30">
+                <button @click="activeTab = 'form'" 
+                        :class="activeTab === 'form' ? 'bg-white text-indigo-800 shadow' : 'text-indigo-100 hover:text-white'"
+                        class="px-4 py-2 rounded-lg transition-all duration-200 flex items-center space-x-1.5">
+                    <i class="fa-solid fa-pen-to-square"></i>
+                    <span>填寫調課單</span>
+                </button>
+                <button @click="activeTab = 'list'" 
+                        :class="activeTab === 'list' ? 'bg-white text-indigo-800 shadow' : 'text-indigo-100 hover:text-white'"
+                        class="px-4 py-2 rounded-lg transition-all duration-200 flex items-center space-x-1.5 relative">
+                    <i class="fa-solid fa-table-list"></i>
+                    <span>調課統計與清單</span>
+                    <span class="bg-amber-400 text-slate-900 text-xs px-2 py-0.5 rounded-full font-bold ml-1" x-text="records.length"></span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Toast Message Container -->
+    <div class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 no-print">
+        <template x-for="toast in toasts" :key="toast.id">
+            <div class="px-4 py-3 rounded-xl shadow-xl text-white flex items-center space-x-3 transition-all duration-300 transform translate-y-0"
+                 :class="{
+                    'bg-emerald-600': toast.type === 'success',
+                    'bg-amber-600': toast.type === 'warning',
+                    'bg-rose-600': toast.type === 'error',
+                    'bg-blue-600': toast.type === 'info'
+                 }">
+                <i class="fa-solid text-lg" 
+                   :class="{
+                     'fa-circle-check': toast.type === 'success',
+                     'fa-triangle-exclamation': toast.type === 'warning',
+                     'fa-circle-xmark': toast.type === 'error',
+                     'fa-circle-info': toast.type === 'info'
+                   }"></i>
+                <span x-text="toast.message" class="text-sm font-medium"></span>
+            </div>
+        </template>
+    </div>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-grow w-full no-print">
+
+        <!-- TAB 1: FORM TAB -->
+        <div x-show="activeTab === 'form'" x-transition class="space-y-6">
+            
+            <!-- Banner / Tips -->
+            <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/60 rounded-2xl p-4 sm:p-5 flex items-start space-x-4 shadow-sm">
+                <div class="bg-blue-500 text-white p-3 rounded-xl mt-0.5 shadow-md">
+                    <i class="fa-solid fa-lightbulb text-xl"></i>
+                </div>
+                <div class="text-sm text-slate-600 leading-relaxed">
+                    <h3 class="font-bold text-slate-800 text-base mb-1">調課注意事項說明：</h3>
+                    <ul class="list-disc list-inside space-y-1">
+                        <li>請先與對調教師口頭確認同意後再進行本表單填寫。</li>
+                        <li>雙方對調時段需包含「星期、節次、課程名稱」等完整資訊。</li>
+                        <li>送出後可自動發送對調確認信件給雙方教師，並記錄於統計表中供教務處核對。</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Form Card -->
+            <form @submit.prevent="saveRecord()" class="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden">
+                <div class="bg-slate-50 border-b border-slate-200 px-6 py-4 flex justify-between items-center">
+                    <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-file-pen text-indigo-600"></i>
+                        <span x-text="isEditing ? '修改調課申請紀錄' : '新增教師調課申請表單'"></span>
+                    </h2>
+                    <span class="text-xs text-rose-500 font-semibold">* 為必填項目</span>
+                </div>
+
+                <div class="p-6 space-y-8">
+                    
+                    <!-- Section 1: 申請調課教師 (Party A) -->
+                    <div class="bg-indigo-50/50 rounded-xl p-5 border border-indigo-100 space-y-4">
+                        <div class="flex items-center space-x-2 border-b border-indigo-200/60 pb-2">
+                            <span class="bg-indigo-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">1</span>
+                            <h3 class="font-bold text-indigo-900">申請調課教師資訊 (欲調出時段)</h3>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <!-- 新學年職稱 -->
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">1. 新學年職稱 <span class="text-rose-500">*</span></label>
+                                <select x-model="formData.applicantTitle" required class="w-full rounded-lg border-slate-300 focus:border-indigo-500 focus:ring-indigo-500 text-sm p-2.5 bg-white border shadow-sm">
+                                    <option value="">-- 請選擇職稱 --</option>
+                                    <template x-for="pos in positionOptions" :key="pos">
+                                        <option :value="pos" x-text="pos"></option>
+                                    </template>
+                                </select>
+                            </div>
+
+                            <!-- 老師姓名 -->
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">2. 申請教師姓名 <span class="text-rose-500">*</span></label>
+                                <input type="text" x-model="formData.applicantName" required placeholder="請輸入姓名" class="w-full rounded-lg border-slate-300 focus:border-indigo-500 focus:ring-indigo-500 text-sm p-2.5 bg-white border shadow-sm">
+                            </div>
+
+                            <!-- 申請人信箱 -->
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">8. 回傳結果信箱 (Email) <span class="text-rose-500">*</span></label>
+                                <input type="email" x-model="formData.applicantEmail" required placeholder="teacher@school.edu.tw" class="w-full rounded-lg border-slate-300 focus:border-indigo-500 focus:ring-indigo-500 text-sm p-2.5 bg-white border shadow-sm">
+                            </div>
+                        </div>
+
+                        <!-- 欲調動的課程時段 -->
+                        <div class="pt-2">
+                            <label class="block text-xs font-bold text-indigo-900 mb-2">3. 想要調動的課程時段 <span class="text-rose-500">*</span></label>
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white p-3.5 rounded-lg border border-indigo-200/80 shadow-sm">
+                                <div>
+                                    <span class="text-xs text-slate-500 block mb-1">星期</span>
+                                    <select x-model="formData.applicantDay" required class="w-full rounded-md border-slate-300 text-sm p-2 bg-slate-50 border">
+                                        <option value="">請選擇星期</option>
+                                        <template x-for="day in dayOptions" :key="day">
+                                            <option :value="day" x-text="day"></option>
+                                        </template>
+                                    </select>
+                                </div>
+                                <div>
+                                    <span class="text-xs text-slate-500 block mb-1">節次</span>
+                                    <select x-model="formData.applicantPeriod" required class="w-full rounded-md border-slate-300 text-sm p-2 bg-slate-50 border">
+                                        <option value="">請選擇節次</option>
+                                        <template x-for="p in periodOptions" :key="p">
+                                            <option :value="p" x-text="p"></option>
+                                        </template>
+                                    </select>
+                                </div>
+                                <div>
+                                    <span class="text-xs text-slate-500 block mb-1">課程名稱 / 班級</span>
+                                    <input type="text" x-model="formData.applicantSubject" required placeholder="例：數學 / 401體育" class="w-full rounded-md border-slate-300 text-sm p-2 bg-slate-50 border">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Swap Direction Icon Divider -->
+                    <div class="flex justify-center -my-3">
+                        <div class="bg-amber-500 text-white w-10 h-10 rounded-full flex items-center justify-center shadow-lg border-2 border-white z-10">
+                            <i class="fa-solid fa-arrow-down-up-lock text-lg"></i>
+                        </div>
+                    </div>
+
+                    <!-- Section 2: 被調課教師 (Party B) -->
+                    <div class="bg-emerald-50/50 rounded-xl p-5 border border-emerald-100 space-y-4">
+                        <div class="flex items-center space-x-2 border-b border-emerald-200/60 pb-2">
+                            <span class="bg-emerald-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">2</span>
+                            <h3 class="font-bold text-emerald-900">被調課教師資訊 (對調時段)</h3>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <!-- 被調課教師職稱 -->
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">4. 被調課老師的職稱 <span class="text-rose-500">*</span></label>
+                                <select x-model="formData.targetTitle" required class="w-full rounded-lg border-slate-300 focus:border-emerald-500 focus:ring-emerald-500 text-sm p-2.5 bg-white border shadow-sm">
+                                    <option value="">-- 請選擇職稱 --</option>
+                                    <template x-for="pos in positionOptions" :key="pos">
+                                        <option :value="pos" x-text="pos"></option>
+                                    </template>
+                                </select>
+                            </div>
+
+                            <!-- 被調課老師姓名 -->
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">5. 被調課老師的姓名 <span class="text-rose-500">*</span></label>
+                                <input type="text" x-model="formData.targetName" required placeholder="請輸入對方姓名" class="w-full rounded-lg border-slate-300 focus:border-emerald-500 focus:ring-emerald-500 text-sm p-2.5 bg-white border shadow-sm">
+                            </div>
+
+                            <!-- 被調課老師信箱 -->
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">對方聯絡信箱 (選填/通知用)</label>
+                                <input type="email" x-model="formData.targetEmail" placeholder="partner@school.edu.tw" class="w-full rounded-lg border-slate-300 focus:border-emerald-500 focus:ring-emerald-500 text-sm p-2.5 bg-white border shadow-sm">
+                            </div>
+                        </div>
+
+                        <!-- 被調課的是 -->
+                        <div class="pt-2">
+                            <label class="block text-xs font-bold text-emerald-900 mb-2">6. 被調課的是 <span class="text-rose-500">*</span></label>
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white p-3.5 rounded-lg border border-emerald-200/80 shadow-sm">
+                                <div>
+                                    <span class="text-xs text-slate-500 block mb-1">星期</span>
+                                    <select x-model="formData.targetDay" required class="w-full rounded-md border-slate-300 text-sm p-2 bg-slate-50 border">
+                                        <option value="">請選擇星期</option>
+                                        <template x-for="day in dayOptions" :key="day">
+                                            <option :value="day" x-text="day"></option>
+                                        </template>
+                                    </select>
+                                </div>
+                                <div>
+                                    <span class="text-xs text-slate-500 block mb-1">節次</span>
+                                    <select x-model="formData.targetPeriod" required class="w-full rounded-md border-slate-300 text-sm p-2 bg-slate-50 border">
+                                        <option value="">請選擇節次</option>
+                                        <template x-for="p in periodOptions" :key="p">
+                                            <option :value="p" x-text="p"></option>
+                                        </template>
+                                    </select>
+                                </div>
+                                <div>
+                                    <span class="text-xs text-slate-500 block mb-1">課程名稱 / 班級</span>
+                                    <input type="text" x-model="formData.targetSubject" required placeholder="例：自然 / 203生活" class="w-full rounded-md border-slate-300 text-sm p-2 bg-slate-50 border">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Additional Memo / Semester -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">學年度 / 備註</label>
+                            <input type="text" x-model="formData.semester" placeholder="例如：115學年度第一學期 (調課原因備註)" class="w-full rounded-lg border-slate-300 text-sm p-2.5 border">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">調課狀態</label>
+                            <select x-model="formData.status" class="w-full rounded-lg border-slate-300 text-sm p-2.5 border bg-white">
+                                <option value="雙方已講好">雙方已講好 (待送教務處)</option>
+                                <option value="教務處審核中">教務處審核中</option>
+                                <option value="已完成調課">已完成調課核備</option>
+                            </select>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Form Action Buttons -->
+                <div class="bg-slate-50 px-6 py-4 border-t border-slate-200 flex flex-wrap gap-3 justify-end items-center">
+                    <button type="button" x-show="isEditing" @click="resetForm()" class="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg shadow-sm hover:bg-slate-100">
+                        取消修改
+                    </button>
+                    <button type="button" @click="resetForm()" x-show="!isEditing" class="px-4 py-2 text-sm font-medium text-slate-500 hover:text-slate-700">
+                        清空重新填寫
+                    </button>
+                    <button type="submit" class="px-6 py-2.5 text-sm font-bold text-white bg-indigo-600 rounded-lg shadow-md hover:bg-indigo-700 active:bg-indigo-800 transition flex items-center gap-2">
+                        <i class="fa-solid fa-paper-plane"></i>
+                        <span x-text="isEditing ? '更新調課紀錄' : '儲存調課申請並發送通知'"></span>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- TAB 2: STATISTICAL LIST & MANAGEMENT -->
+        <div x-show="activeTab === 'list'" x-transition class="space-y-6">
+
+            <!-- Summary Statistics Widgets -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-3">
+                    <div class="p-3 bg-indigo-100 text-indigo-600 rounded-lg">
+                        <i class="fa-solid fa-rectangle-list text-xl"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs text-slate-500 font-medium">總調課申請筆數</p>
+                        <p class="text-2xl font-bold text-slate-800" x-text="records.length"></p>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-3">
+                    <div class="p-3 bg-amber-100 text-amber-600 rounded-lg">
+                        <i class="fa-solid fa-handshake text-xl"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs text-slate-500 font-medium">雙方已講好</p>
+                        <p class="text-2xl font-bold text-amber-600" x-text="records.filter(r => r.status === '雙方已講好').length"></p>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-3">
+                    <div class="p-3 bg-blue-100 text-blue-600 rounded-lg">
+                        <i class="fa-solid fa-spinner text-xl"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs text-slate-500 font-medium">教務處審核中</p>
+                        <p class="text-2xl font-bold text-blue-600" x-text="records.filter(r => r.status === '教務處審核中').length"></p>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-3">
+                    <div class="p-3 bg-emerald-100 text-emerald-600 rounded-lg">
+                        <i class="fa-solid fa-circle-check text-xl"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs text-slate-500 font-medium">已完成調課</p>
+                        <p class="text-2xl font-bold text-emerald-600" x-text="records.filter(r => r.status === '已完成調課').length"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Controls & Filters -->
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
+                
+                <!-- Search Box -->
+                <div class="relative w-full md:w-80">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                    <input type="text" x-model="searchQuery" placeholder="搜尋老師姓名、班級或科目..." class="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+
+                <!-- Filters & Quick Actions -->
+                <div class="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
+                    <select x-model="filterStatus" class="border border-slate-300 rounded-lg text-sm p-2 bg-slate-50">
+                        <option value="ALL">所有狀態</option>
+                        <option value="雙方已講好">雙方已講好</option>
+                        <option value="教務處審核中">教務處審核中</option>
+                        <option value="已完成調課">已完成調課</option>
+                    </select>
+
+                    <button @click="exportCSV()" class="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-200 border border-slate-300 flex items-center gap-1.5">
+                        <i class="fa-solid fa-file-csv text-emerald-600 text-sm"></i>
+                        <span>匯出 CSV 統計表</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Data Table -->
+            <div class="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse min-w-[900px]">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-700 text-xs uppercase font-bold border-b border-slate-200">
+                                <th class="p-4">申請單號 / 日期</th>
+                                <th class="p-4 bg-indigo-50/70 text-indigo-900">申請教師 (出)</th>
+                                <th class="p-4 bg-indigo-50/70 text-indigo-900">調出時段 / 課程</th>
+                                <th class="p-4 bg-emerald-50/70 text-emerald-900">被調教師 (進)</th>
+                                <th class="p-4 bg-emerald-50/70 text-emerald-900">對調時段 / 課程</th>
+                                <th class="p-4 text-center">目前狀態</th>
+                                <th class="p-4 text-center">功能操作</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-200 text-sm">
+                            <template x-for="item in filteredRecords" :key="item.id">
+                                <tr class="hover:bg-slate-50/80 transition-colors">
+                                    
+                                    <!-- ID & Date -->
+                                    <td class="p-4 text-xs font-mono text-slate-500">
+                                        <div class="font-bold text-slate-700" x-text="'#' + String(item.id).slice(-4)"></div>
+                                        <div x-text="item.createdAt"></div>
+                                    </td>
+
+                                    <!-- Applicant Info -->
+                                    <td class="p-4 bg-indigo-50/30">
+                                        <div class="font-bold text-slate-800" x-text="item.applicantName"></div>
+                                        <div class="text-xs text-indigo-600 font-medium" x-text="item.applicantTitle"></div>
+                                        <div class="text-xs text-slate-400 truncate max-w-[140px]" x-text="item.applicantEmail" :title="item.applicantEmail"></div>
+                                    </td>
+
+                                    <!-- Out Slot -->
+                                    <td class="p-4 bg-indigo-50/30">
+                                        <span class="inline-block px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs mb-1" x-text="item.applicantDay + ' ' + item.applicantPeriod"></span>
+                                        <div class="font-semibold text-slate-700" x-text="item.applicantSubject"></div>
+                                    </td>
+
+                                    <!-- Target Info -->
+                                    <td class="p-4 bg-emerald-50/30">
+                                        <div class="font-bold text-slate-800" x-text="item.targetName"></div>
+                                        <div class="text-xs text-emerald-600 font-medium" x-text="item.targetTitle"></div>
+                                        <div class="text-xs text-slate-400 truncate max-w-[140px]" x-text="item.targetEmail || '無信箱'" :title="item.targetEmail"></div>
+                                    </td>
+
+                                    <!-- In Slot -->
+                                    <td class="p-4 bg-emerald-50/30">
+                                        <span class="inline-block px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-xs mb-1" x-text="item.targetDay + ' ' + item.targetPeriod"></span>
+                                        <div class="font-semibold text-slate-700" x-text="item.targetSubject"></div>
+                                    </td>
+
+                                    <!-- Status Badge -->
+                                    <td class="p-4 text-center">
+                                        <span class="px-2.5 py-1 rounded-full text-xs font-bold inline-block"
+                                              :class="{
+                                                'bg-amber-100 text-amber-800 border border-amber-300': item.status === '雙方已講好',
+                                                'bg-blue-100 text-blue-800 border border-blue-300': item.status === '教務處審核中',
+                                                'bg-emerald-100 text-emerald-800 border border-emerald-300': item.status === '已完成調課'
+                                              }"
+                                              x-text="item.status">
+                                        </span>
+                                    </td>
+
+                                    <!-- Action Buttons -->
+                                    <td class="p-4 text-center">
+                                        <div class="flex items-center justify-center space-x-1">
+                                            <!-- Notice / Email Modal Button -->
+                                            <button @click="openNoticeModal(item)" title="檢視通知單 / 寄信" class="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg transition">
+                                                <i class="fa-solid fa-envelope-open-text"></i>
+                                            </button>
+
+                                            <!-- Edit Button -->
+                                            <button @click="editRecord(item)" title="修改此筆資料" class="p-1.5 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-lg transition">
+                                                <i class="fa-solid fa-pen"></i>
+                                            </button>
+
+                                            <!-- Delete Button -->
+                                            <button @click="deleteRecord(item.id)" title="刪除此紀錄" class="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg transition">
+                                                <i class="fa-solid fa-trash-can"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+
+                            <!-- Empty State -->
+                            <tr x-show="filteredRecords.length === 0">
+                                <td colspan="7" class="p-12 text-center text-slate-400">
+                                    <i class="fa-solid fa-inbox text-4xl mb-2 block"></i>
+                                    <span>目前尚無符合條件的調課紀錄</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- MODAL: Email Summary & Print Preview -->
+    <div x-show="showModal" class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 no-print" x-transition>
+        <div class="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+            
+            <!-- Modal Header -->
+            <div class="bg-indigo-700 text-white px-6 py-4 flex justify-between items-center">
+                <h3 class="font-bold text-lg flex items-center gap-2">
+                    <i class="fa-solid fa-paper-plane text-amber-300"></i>
+                    <span>調課結果通知與列印</span>
+                </h3>
+                <button @click="showModal = false" class="text-white/80 hover:text-white text-xl font-bold">&times;</button>
+            </div>
+
+            <!-- Modal Body -->
+            <div class="p-6 overflow-y-auto space-y-5" x-show="selectedItem">
+                
+                <!-- Status Bar -->
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex justify-between items-center text-xs">
+                    <span class="text-slate-500">申請單編號：<strong class="text-slate-800" x-text="'#' + (selectedItem?.id || '')"></strong></span>
+                    <span class="text-slate-500">填表日期：<strong class="text-slate-800" x-text="selectedItem?.createdAt || ''"></strong></span>
+                </div>
+
+                <!-- Preview Card -->
+                <div class="border border-indigo-200 bg-indigo-50/30 rounded-xl p-4 text-sm space-y-3">
+                    <div class="font-bold text-indigo-900 border-b border-indigo-100 pb-2 flex justify-between">
+                        <span>【新學年教師調課對調摘要】</span>
+                        <span class="text-xs bg-indigo-200 text-indigo-800 px-2 py-0.5 rounded" x-text="selectedItem?.semester"></span>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-slate-700">
+                        <div class="bg-white p-3 rounded-lg border border-slate-200">
+                            <span class="text-xs font-bold text-indigo-600 block mb-1">申請調課老師 (出)</span>
+                            <p class="font-bold text-slate-800" x-text="(selectedItem?.applicantTitle || '') + ' ' + (selectedItem?.applicantName || '')"></p>
+                            <p class="text-xs text-slate-500" x-text="'信箱: ' + (selectedItem?.applicantEmail || '')"></p>
+                            <p class="mt-2 text-xs font-semibold text-rose-600" x-text="'出: ' + (selectedItem?.applicantDay || '') + ' ' + (selectedItem?.applicantPeriod || '') + ' (' + (selectedItem?.applicantSubject || '') + ')'"></p>
+                        </div>
+
+                        <div class="bg-white p-3 rounded-lg border border-slate-200">
+                            <span class="text-xs font-bold text-emerald-600 block mb-1">被調課老師 (進)</span>
+                            <p class="font-bold text-slate-800" x-text="(selectedItem?.targetTitle || '') + ' ' + (selectedItem?.targetName || '')"></p>
+                            <p class="text-xs text-slate-500" x-text="'信箱: ' + (selectedItem?.targetEmail || '無填寫')"></p>
+                            <p class="mt-2 text-xs font-semibold text-emerald-600" x-text="'進: ' + (selectedItem?.targetDay || '') + ' ' + (selectedItem?.targetPeriod || '') + ' (' + (selectedItem?.targetSubject || '') + ')'"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Notification Options -->
+                <div class="space-y-3">
+                    <label class="block text-xs font-bold text-slate-700">選擇回傳/發送通知方式：</label>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <!-- Mailto Link -->
+                        <button @click="sendDirectEmail(selectedItem)" class="p-3 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-800 rounded-xl flex items-center space-x-3 text-left transition">
+                            <i class="fa-solid fa-envelope text-2xl text-blue-600"></i>
+                            <div>
+                                <div class="font-bold text-xs">發送 Email 給對調老師</div>
+                                <div class="text-[11px] text-blue-600">自動喚起郵件軟體寄送</div>
+                            </div>
+                        </button>
+
+                        <!-- Copy Text for Line/Message -->
+                        <button @click="copySummaryText(selectedItem)" class="p-3 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-emerald-800 rounded-xl flex items-center space-x-3 text-left transition">
+                            <i class="fa-solid fa-copy text-2xl text-emerald-600"></i>
+                            <div>
+                                <div class="font-bold text-xs">複製文字摘要</div>
+                                <div class="text-[11px] text-emerald-600">貼至 LINE 或文字訊息通知</div>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="bg-slate-100 px-6 py-3 border-t border-slate-200 flex justify-between items-center">
+                <button @click="triggerPrint()" class="px-4 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold hover:bg-slate-900 transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-print"></i>
+                    <span>列印 A4 調課單 (PDF)</span>
+                </button>
+                <button @click="showModal = false" class="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-300">
+                    關閉
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PRINT ONLY TEMPLATE (Standard School Form) -->
+    <div class="print-only p-8 max-w-2xl mx-auto text-black" x-show="selectedItem">
+        <div class="text-center border-b-2 border-black pb-4 mb-6">
+            <h1 class="text-2xl font-bold tracking-wider">國民小學 教師互相調課申請單</h1>
+            <p class="text-sm mt-1" x-text="selectedItem?.semester || '115學年度第一學期'"></p>
+        </div>
+
+        <table class="w-full border-collapse border border-black text-sm mb-6">
+            <tbody>
+                <tr>
+                    <td class="border border-black p-3 font-bold bg-gray-100 w-1/4">申請單號</td>
+                    <td class="border border-black p-3" x-text="'#' + (selectedItem?.id || '')"></td>
+                    <td class="border border-black p-3 font-bold bg-gray-100 w-1/4">申請日期</td>
+                    <td class="border border-black p-3" x-text="selectedItem?.createdAt || ''"></td>
+                </tr>
+                <tr>
+                    <td class="border border-black p-3 font-bold bg-gray-100" colspan="2">申請調課教師 (出)</td>
+                    <td class="border border-black p-3 font-bold bg-gray-100" colspan="2">被調課教師 (進)</td>
+                </tr>
+                <tr>
+                    <td class="border border-black p-3 font-bold">職稱 / 姓名</td>
+                    <td class="border border-black p-3" x-text="(selectedItem?.applicantTitle || '') + ' - ' + (selectedItem?.applicantName || '')"></td>
+                    <td class="border border-black p-3 font-bold">職稱 / 姓名</td>
+                    <td class="border border-black p-3" x-text="(selectedItem?.targetTitle || '') + ' - ' + (selectedItem?.targetName || '')"></td>
+                </tr>
+                <tr>
+                    <td class="border border-black p-3 font-bold">對調前時段</td>
+                    <td class="border border-black p-3" x-text="(selectedItem?.applicantDay || '') + ' ' + (selectedItem?.applicantPeriod || '')"></td>
+                    <td class="border border-black p-3 font-bold">對調前時段</td>
+                    <td class="border border-black p-3" x-text="(selectedItem?.targetDay || '') + ' ' + (selectedItem?.targetPeriod || '')"></td>
+                </tr>
+                <tr>
+                    <td class="border border-black p-3 font-bold">原授課科目</td>
+                    <td class="border border-black p-3" x-text="selectedItem?.applicantSubject || ''"></td>
+                    <td class="border border-black p-3 font-bold">原授課科目</td>
+                    <td class="border border-black p-3" x-text="selectedItem?.targetSubject || ''"></td>
+                </tr>
+                <tr>
+                    <td class="border border-black p-3 font-bold">聯絡 Email</td>
+                    <td class="border border-black p-3" x-text="selectedItem?.applicantEmail || ''"></td>
+                    <td class="border border-black p-3 font-bold">聯絡 Email</td>
+                    <td class="border border-black p-3" x-text="selectedItem?.targetEmail || '無'"></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Signatures Area -->
+        <div class="mt-12 grid grid-cols-3 gap-4 text-center text-sm pt-8">
+            <div>
+                <p class="font-bold mb-12">申請教師簽章：</p>
+                <p class="border-t border-dashed border-black pt-1">__________________</p>
+            </div>
+            <div>
+                <p class="font-bold mb-12">被調課教師簽章：</p>
+                <p class="border-t border-dashed border-black pt-1">__________________</p>
+            </div>
+            <div>
+                <p class="font-bold mb-12">教務處審核 / 核章：</p>
+                <p class="border-t border-dashed border-black pt-1">__________________</p>
+            </div>
+        </div>
+
+        <div class="mt-8 text-xs text-gray-500 text-center">
+            * 本單一式乙份，經雙方教師簽章並送教務處教學組核備後生效。
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-slate-800 text-slate-400 py-6 text-center text-xs mt-auto no-print">
+        <div class="max-w-7xl mx-auto px-4">
+            <p>新學年教師互相調課登記管理系統 &copy; 2026 教學組工具版</p>
+            <p class="mt-1 text-slate-500">方便教師於排課過後快速對調與教務處統計核備</p>
+        </div>
+    </footer>
+
+    <script>
+        function swapApp() {
+            return {
+                activeTab: 'form',
+                searchQuery: '',
+                filterStatus: 'ALL',
+                isEditing: false,
+                editingId: null,
+                showModal: false,
+                selectedItem: null,
+                toasts: [],
+                isCloudSync: false,
+                db: null,
+
+                // Days Options
+                dayOptions: ['星期一', '星期二', '星期三', '星期四', '星期五'],
+
+                // Period Options (1~7)
+                periodOptions: ['第一節', '第二節', '第三節', '第四節', '第五節', '第六節', '第七節'],
+
+                // Dynamic Position Titles Generator
+                positionOptions: (function() {
+                    let list = ['科任'];
+                    for(let i = 1; i <= 12; i++) { list.push(`一年級 ${i} 班`); }
+                    for(let i = 1; i <= 11; i++) { list.push(`二年級 ${i} 班`); }
+                    const grades = ['三年級', '四年級', '五年級', '六年級'];
+                    grades.forEach(g => {
+                        for(let i = 1; i <= 12; i++) { list.push(`${g} ${i} 班`); }
+                    });
+                    return list;
+                })(),
+
+                // Form Data Object
+                formData: {
+                    applicantTitle: '',
+                    applicantName: '',
+                    applicantEmail: '',
+                    applicantDay: '',
+                    applicantPeriod: '',
+                    applicantSubject: '',
+                    
+                    targetTitle: '',
+                    targetName: '',
+                    targetEmail: '',
+                    targetDay: '',
+                    targetPeriod: '',
+                    targetSubject: '',
+
+                    semester: '115學年度第一學期',
+                    status: '雙方已講好'
+                },
+
+                // Records Store
+                records: [],
+
+                async initData() {
+                    // ========================================================
+                    // ⚙️ 【GitHub Pages 跨裝置雲端同步設定處】
+                    // 請將從 Google Firebase 複製到的 firebaseConfig 內容貼於下方：
+                    // ========================================================
+                    const customFirebaseConfig = {
+  			apiKey: "AIzaSyAJzQmeIua1jCs2v7Rvg4LnWYU52-tHFIo",
+  			authDomain: "school-swap-system.firebaseapp.com",
+  			projectId: "school-swap-system",
+  			storageBucket: "school-swap-system.firebasestorage.app",
+  			messagingSenderId: "894518845264",
+  			appId: "1:894518845264:web:3c95d18f9c73989d789655",
+  			measurementId: "G-KXKK3HM0BF"
+			};
+
+                    // 如果有偵測到全域 config 或 customFirebaseConfig 則啟用雲端
+                    const configToUse = customFirebaseConfig || (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null);
+
+                    if (configToUse && window.FirebaseSDK) {
+                        try {
+                            const { initializeApp, getAuth, signInAnonymously, getFirestore, collection, onSnapshot } = window.FirebaseSDK;
+                            const app = initializeApp(configToUse);
+                            const auth = getAuth(app);
+                            this.db = getFirestore(app);
+
+                            await signInAnonymously(auth);
+                            this.isCloudSync = true;
+
+                            const recordsCollection = collection(this.db, 'teacher_swap_records');
+
+                            // Real-time listener across all devices
+                            onSnapshot(recordsCollection, (snapshot) => {
+                                const cloudRecords = snapshot.docs.map(doc => ({
+                                    id: doc.id,
+                                    ...doc.data()
+                                }));
+                                this.records = cloudRecords.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+                            }, (err) => {
+                                console.error("Firestore sync error", err);
+                                this.initLocalStorage();
+                            });
+                            return;
+                        } catch (e) {
+                            console.error("Firebase init failed", e);
+                        }
+                    }
+
+                    // 備用方案：使用 LocalStorage 本機儲存
+                    this.initLocalStorage();
+                },
+
+                initLocalStorage() {
+                    const saved = localStorage.getItem('teacher_swap_records_v1');
+                    if (saved) {
+                        try {
+                            this.records = JSON.parse(saved);
+                        } catch (e) {
+                            this.records = [];
+                        }
+                    }
+                },
+
+                saveToStorage() {
+                    if (!this.isCloudSync) {
+                        localStorage.setItem('teacher_swap_records_v1', JSON.stringify(this.records));
+                    }
+                },
+
+                async saveRecord() {
+                    if (this.isCloudSync) {
+                        const { collection, addDoc, doc, updateDoc } = window.FirebaseSDK;
+                        try {
+                            if (this.isEditing) {
+                                const docRef = doc(this.db, 'teacher_swap_records', this.editingId);
+                                await updateDoc(docRef, { ...this.formData });
+                                this.showToast('雲端調課紀錄修改成功！', 'success');
+                            } else {
+                                const newRecord = {
+                                    ...this.formData,
+                                    createdAt: new Date().toISOString().split('T')[0]
+                                };
+                                const recordsRef = collection(this.db, 'teacher_swap_records');
+                                const docRef = await addDoc(recordsRef, newRecord);
+                                this.selectedItem = { ...newRecord, id: docRef.id };
+                                this.showModal = true;
+                                this.showToast('已即時同步至全校雲端系統！', 'success');
+                            }
+                        } catch (err) {
+                            console.error(err);
+                            this.showToast('儲存失敗，請檢查網路連線', 'error');
+                        }
+                    } else {
+                        // LocalStorage fallback
+                        if (this.isEditing) {
+                            const idx = this.records.findIndex(r => r.id === this.editingId);
+                            if (idx !== -1) {
+                                this.records[idx] = { ...this.formData, id: this.editingId, createdAt: this.records[idx].createdAt };
+                                this.showToast('調課紀錄修改成功！', 'success');
+                            }
+                        } else {
+                            const newRecord = { ...this.formData, id: Date.now().toString(), createdAt: new Date().toISOString().split('T')[0] };
+                            this.records.unshift(newRecord);
+                            this.showToast('調課申請已提交 (單機儲存)', 'success');
+                            this.selectedItem = newRecord;
+                            this.showModal = true;
+                        }
+                        this.saveToStorage();
+                    }
+
+                    this.resetForm();
+                    this.activeTab = 'list';
+                },
+
+                async deleteRecord(id) {
+                    if (this.isCloudSync) {
+                        const { doc, deleteDoc } = window.FirebaseSDK;
+                        try {
+                            const docRef = doc(this.db, 'teacher_swap_records', id);
+                            await deleteDoc(docRef);
+                            this.showToast('已從雲端即時刪除該紀錄', 'warning');
+                        } catch (e) {
+                            console.error(e);
+                            this.showToast('刪除失敗，請檢查網路狀態', 'error');
+                        }
+                    } else {
+                        this.records = this.records.filter(r => r.id !== id);
+                        this.saveToStorage();
+                        this.showToast('已刪除該筆調課紀錄', 'warning');
+                    }
+                },
+
+                resetForm() {
+                    this.formData = {
+                        applicantTitle: '',
+                        applicantName: '',
+                        applicantEmail: '',
+                        applicantDay: '',
+                        applicantPeriod: '',
+                        applicantSubject: '',
+                        
+                        targetTitle: '',
+                        targetName: '',
+                        targetEmail: '',
+                        targetDay: '',
+                        targetPeriod: '',
+                        targetSubject: '',
+
+                        semester: '115學年度第一學期',
+                        status: '雙方已講好'
+                    };
+                    this.isEditing = false;
+                    this.editingId = null;
+                },
+
+                editRecord(item) {
+                    this.formData = JSON.parse(JSON.stringify(item));
+                    this.isEditing = true;
+                    this.editingId = item.id;
+                    this.activeTab = 'form';
+                },
+
+                get filteredRecords() {
+                    return this.records.filter(item => {
+                        if (this.filterStatus !== 'ALL' && item.status !== this.filterStatus) {
+                            return false;
+                        }
+                        if (this.searchQuery.trim() !== '') {
+                            const q = this.searchQuery.toLowerCase();
+                            const matchApplicant = (item.applicantName || '').toLowerCase().includes(q) || 
+                                                 (item.applicantTitle || '').toLowerCase().includes(q) ||
+                                                 (item.applicantSubject || '').toLowerCase().includes(q);
+                            const matchTarget = (item.targetName || '').toLowerCase().includes(q) || 
+                                              (item.targetTitle || '').toLowerCase().includes(q) ||
+                                              (item.targetSubject || '').toLowerCase().includes(q);
+                            return matchApplicant || matchTarget;
+                        }
+                        return true;
+                    });
+                },
+
+                openNoticeModal(item) {
+                    this.selectedItem = item;
+                    this.showModal = true;
+                },
+
+                sendDirectEmail(item) {
+                    const to = item.targetEmail || item.applicantEmail;
+                    const cc = item.applicantEmail;
+                    const subject = encodeURIComponent(`【調課通知】${item.applicantTitle} ${item.applicantName} 老師與您講好的調課確認`);
+                    const body = encodeURIComponent(
+                        `親愛的 ${item.targetName} 老師您好：\n\n` +
+                        `這是一封調課確認通知信，以下為我們已講好並登記的對調課表內容：\n\n` +
+                        `----------------------------------------\n` +
+                        `■ 申請調課教師：${item.applicantTitle} ${item.applicantName}\n` +
+                        `   原時段/科目：${item.applicantDay} ${item.applicantPeriod} (${item.applicantSubject})\n\n` +
+                        `■ 被調課教師：${item.targetTitle} ${item.targetName}\n` +
+                        `   對調時段/科目：${item.targetDay} ${item.targetPeriod} (${item.targetSubject})\n` +
+                        `----------------------------------------\n\n` +
+                        `本調課申請單已登錄於系統中，並將於簽章後送至教務處教學組核備。\n` +
+                        `如有異議請儘速聯繫，謝謝您！`
+                    );
+
+                    window.location.href = `mailto:${to}?cc=${cc}&subject=${subject}&body=${body}`;
+                    this.showToast('已喚起郵件軟體！', 'info');
+                },
+
+                copySummaryText(item) {
+                    const text = 
+                        `【教師互相調課對調通知】\n` +
+                        `▸ 申請教師：${item.applicantTitle} ${item.applicantName}\n` +
+                        `  (出) ${item.applicantDay} ${item.applicantPeriod} [${item.applicantSubject}]\n` +
+                        `▸ 被調教師：${item.targetTitle} ${item.targetName}\n` +
+                        `  (進) ${item.targetDay} ${item.targetPeriod} [${item.targetSubject}]\n` +
+                        `▸ 狀態：${item.status}\n` +
+                        `請雙方確認後送教務處核備。`;
+
+                    const el = document.createElement('textarea');
+                    el.value = text;
+                    document.body.appendChild(el);
+                    el.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(el);
+
+                    this.showToast('調課摘要已複製到剪貼簿！可貼至 Line 給老師', 'success');
+                },
+
+                triggerPrint() {
+                    window.print();
+                },
+
+                exportCSV() {
+                    if (this.records.length === 0) {
+                        this.showToast('目前尚無資料可供匯出', 'warning');
+                        return;
+                    }
+
+                    let csvContent = "\uFEFF";
+                    csvContent += "申請單號,填表日期,申請職稱,申請教師,申請信箱,調出星期,調出節次,調出科目,被調職稱,被調教師,被調信箱,對調星期,對調節次,對調科目,狀態\n";
+
+                    this.records.forEach(r => {
+                        csvContent += `"${r.id}","${r.createdAt}","${r.applicantTitle}","${r.applicantName}","${r.applicantEmail}","${r.applicantDay}","${r.applicantPeriod}","${r.applicantSubject}","${r.targetTitle}","${r.targetName}","${r.targetEmail || ''}","${r.targetDay}","${r.targetPeriod}","${r.targetSubject}","${r.status}"\n`;
+                    });
+
+                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement("a");
+                    link.setAttribute("href", url);
+                    link.setAttribute("download", `教師互相調課統計表_${new Date().toISOString().split('T')[0]}.csv`);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+
+                    this.showToast('已成功匯出 CSV 統計表！', 'success');
+                },
+
+                showToast(message, type = 'info') {
+                    const id = Date.now();
+                    this.toasts.push({ id, message, type });
+                    setTimeout(() => {
+                        this.toasts = this.toasts.filter(t => t.id !== id);
+                    }, 3500);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
