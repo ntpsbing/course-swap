@@ -55,132 +55,158 @@
         }
     </script>
 </head>
-<body class="bg-slate-100 min-h-screen text-slate-800" x-data="swapApp()">
+<body class="bg-slate-50 min-h-screen text-slate-800" x-data="swapApp()">
 
     <!-- 頂部導覽列 -->
-    <header class="bg-indigo-700 text-white shadow-lg">
+    <header class="bg-gradient-to-r from-indigo-700 to-indigo-900 text-white shadow-md">
         <div class="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
-            <h1 class="text-2xl font-bold flex items-center gap-2">
-                <i class="fa-solid fa-arrow-right-arrow-left me-2"></i>教師調代課登記系統
+            <h1 class="text-2xl font-bold flex items-center gap-2 tracking-wide">
+                <i class="fa-solid fa-arrow-right-arrow-left text-indigo-300"></i> 教師調代課即時登記系統
             </h1>
-            <div class="flex items-center gap-2 bg-indigo-800 px-3 py-1.5 rounded-full text-sm">
-                <span class="w-3 h-3 rounded-full" :class="isOnline ? 'bg-green-400 animate-pulse' : 'bg-amber-400'"></span>
+            <div class="flex items-center gap-2 bg-indigo-800/80 backdrop-blur px-3.5 py-1.5 rounded-full text-xs font-medium border border-indigo-600/50">
+                <span class="w-2.5 h-2.5 rounded-full" :class="isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'"></span>
                 <span x-text="isOnline ? '🟢 雲端即時同步中' : '🟡 區域離線模式'"></span>
             </div>
         </div>
     </header>
 
-    <main class="max-w-6xl mx-auto px-4 py-6 space-y-6">
+    <main class="max-w-6xl mx-auto px-4 py-8 space-y-8">
 
         <!-- 狀態統計區塊 -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
                 <div>
-                    <p class="text-sm text-slate-500 font-medium">雙方已講好 (待送審)</p>
-                    <p class="text-2xl font-bold text-amber-600" x-text="stats.pending"></p>
+                    <p class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">雙方已講好 (待送審)</p>
+                    <p class="text-3xl font-extrabold text-amber-500" x-text="stats.pending"></p>
                 </div>
-                <div class="w-12 h-12 bg-amber-50 rounded-full flex items-center justify-center text-amber-500 text-xl">
+                <div class="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center text-amber-500 text-xl shadow-inner">
                     <i class="fa-regular fa-clock"></i>
                 </div>
             </div>
-            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
                 <div>
-                    <p class="text-sm text-slate-500 font-medium">教務處審核中</p>
-                    <p class="text-2xl font-bold text-blue-600" x-text="stats.reviewing"></p>
+                    <p class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">教務處審核中</p>
+                    <p class="text-3xl font-extrabold text-blue-600" x-text="stats.reviewing"></p>
                 </div>
-                <div class="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-blue-500 text-xl">
+                <div class="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-blue-500 text-xl shadow-inner">
                     <i class="fa-solid fa-spinner"></i>
                 </div>
             </div>
-            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
                 <div>
-                    <p class="text-sm text-slate-500 font-medium">已完成調課核備</p>
-                    <p class="text-2xl font-bold text-emerald-600" x-text="stats.completed"></p>
+                    <p class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">已完成調課核備</p>
+                    <p class="text-3xl font-extrabold text-emerald-600" x-text="stats.completed"></p>
                 </div>
-                <div class="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-500 text-xl">
+                <div class="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-500 text-xl shadow-inner">
                     <i class="fa-solid fa-circle-check"></i>
                 </div>
             </div>
         </div>
 
-        <!-- 登記表單 -->
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <h2 class="text-lg font-bold text-slate-700 mb-4 flex items-center gap-2">
-                <i class="fa-solid fa-pen-to-square text-indigo-600"></i>
-                <span x-text="form.id ? '編輯調課申請' : '新增調課申請'"></span>
-            </h2>
-            <form @submit.prevent="saveRecord()" class="space-y-4">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="p-4 bg-slate-50 rounded-lg space-y-3">
-                        <h3 class="font-semibold text-indigo-900 border-b pb-2">【申請人 / 原授課】</h3>
-                        <div class="grid grid-cols-2 gap-2">
+        <!-- 登記表單卡片 -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+            <div class="bg-slate-50/80 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-pen-to-square text-indigo-600"></i>
+                    <span x-text="form.id ? '編輯調課紀錄' : '新增調課登記'"></span>
+                </h2>
+                <span class="text-xs text-slate-400">* 免登入即可填寫，資料自動同步</span>
+            </div>
+            
+            <form @submit.prevent="saveRecord()" class="p-6 space-y-6">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    
+                    <!-- 申請人 (原課) -->
+                    <div class="p-5 rounded-xl border border-indigo-100 bg-indigo-50/30 space-y-4">
+                        <div class="flex items-center gap-2 border-b border-indigo-100 pb-2.5">
+                            <span class="w-2 h-2 rounded-full bg-indigo-600"></span>
+                            <h3 class="font-bold text-indigo-950 text-sm">【申請人 / 原授課課表】</h3>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
                             <div>
-                                <label class="block text-xs text-slate-500 mb-1">教師姓名</label>
-                                <input type="text" x-model="form.applicantName" required class="w-full px-3 py-2 border rounded-md text-sm">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">教師姓名</label>
+                                <input type="text" x-model="form.applicantName" placeholder="例如: 王小明" required class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
                             </div>
                             <div>
-                                <label class="block text-xs text-slate-500 mb-1">班級</label>
-                                <select x-model="form.applicantGrade" class="w-full px-3 py-2 border rounded-md text-sm">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">班級</label>
+                                <select x-model="form.applicantGrade" class="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
                                     <template x-for="g in grades" :key="g"><option :value="g" x-text="g"></option></template>
                                 </select>
                             </div>
                         </div>
-                        <div class="grid grid-cols-2 gap-2">
+                        <div class="grid grid-cols-3 gap-3">
                             <div>
-                                <label class="block text-xs text-slate-500 mb-1">節次</label>
-                                <select x-model="form.applicantPeriod" class="w-full px-3 py-2 border rounded-md text-sm">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">星期</label>
+                                <select x-model="form.applicantDay" class="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                                    <template x-for="d in days" :key="d"><option :value="d" x-text="d"></option></template>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">節次</label>
+                                <select x-model="form.applicantPeriod" class="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
                                     <template x-for="p in periods" :key="p"><option :value="p" x-text="p"></option></template>
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-xs text-slate-500 mb-1">科目</label>
-                                <input type="text" x-model="form.applicantSubject" required class="w-full px-3 py-2 border rounded-md text-sm">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">科目</label>
+                                <input type="text" x-model="form.applicantSubject" placeholder="如: 數學" required class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
                             </div>
                         </div>
                     </div>
 
-                    <div class="p-4 bg-slate-50 rounded-lg space-y-3">
-                        <h3 class="font-semibold text-indigo-900 border-b pb-2">【被對調 / 代課人】</h3>
-                        <div class="grid grid-cols-2 gap-2">
+                    <!-- 對調/代課人 -->
+                    <div class="p-5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-4">
+                        <div class="flex items-center gap-2 border-b border-slate-200 pb-2.5">
+                            <span class="w-2 h-2 rounded-full bg-slate-500"></span>
+                            <h3 class="font-bold text-slate-800 text-sm">【被對調 / 代課教師】</h3>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
                             <div>
-                                <label class="block text-xs text-slate-500 mb-1">教師姓名</label>
-                                <input type="text" x-model="form.respondentName" required class="w-full px-3 py-2 border rounded-md text-sm">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">教師姓名</label>
+                                <input type="text" x-model="form.respondentName" placeholder="例如: 陳大春" required class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
                             </div>
                             <div>
-                                <label class="block text-xs text-slate-500 mb-1">班級</label>
-                                <select x-model="form.respondentGrade" class="w-full px-3 py-2 border rounded-md text-sm">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">班級</label>
+                                <select x-model="form.respondentGrade" class="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
                                     <template x-for="g in grades" :key="g"><option :value="g" x-text="g"></option></template>
                                 </select>
                             </div>
                         </div>
-                        <div class="grid grid-cols-2 gap-2">
+                        <div class="grid grid-cols-3 gap-3">
                             <div>
-                                <label class="block text-xs text-slate-500 mb-1">節次</label>
-                                <select x-model="form.respondentPeriod" class="w-full px-3 py-2 border rounded-md text-sm">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">星期</label>
+                                <select x-model="form.respondentDay" class="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                                    <template x-for="d in days" :key="d"><option :value="d" x-text="d"></option></template>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">節次</label>
+                                <select x-model="form.respondentPeriod" class="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
                                     <template x-for="p in periods" :key="p"><option :value="p" x-text="p"></option></template>
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-xs text-slate-500 mb-1">科目</label>
-                                <input type="text" x-model="form.respondentSubject" required class="w-full px-3 py-2 border rounded-md text-sm">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">科目</label>
+                                <input type="text" x-model="form.respondentSubject" placeholder="如: 國語" required class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="flex items-center justify-between pt-2">
-                    <div class="w-1/3">
-                        <label class="block text-xs text-slate-500 mb-1">當前狀態</label>
-                        <select x-model="form.status" class="w-full px-3 py-2 border rounded-md text-sm bg-white">
+                <!-- 底部狀態與按鈕 -->
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2 border-t border-slate-100">
+                    <div class="sm:w-80">
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">進度狀態</label>
+                        <select x-model="form.status" class="w-full px-3 py-2 border rounded-lg text-sm bg-white font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
                             <option value="雙方已講好 (待送教務處)">雙方已講好 (待送教務處)</option>
                             <option value="教務處審核中">教務處審核中</option>
                             <option value="已完成調課核備">已完成調課核備</option>
                         </select>
                     </div>
-                    <div class="flex gap-2">
-                        <button type="button" x-show="form.id" @click="resetForm()" class="px-4 py-2 border text-slate-600 rounded-md text-sm hover:bg-slate-50">取消</button>
-                        <button type="submit" class="px-6 py-2 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700 shadow-sm transition">
-                            <i class="fa-solid fa-floppy-disk me-1"></i> <span x-text="form.id ? '更新紀錄' : '儲存送出'"></span>
+                    <div class="flex items-center gap-3">
+                        <button type="button" x-show="form.id" @click="resetForm()" class="px-4 py-2 border border-slate-300 text-slate-600 rounded-lg text-sm hover:bg-slate-50 transition">取消編輯</button>
+                        <button type="submit" class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm shadow-md shadow-indigo-200 transition">
+                            <i class="fa-solid fa-floppy-disk me-1.5"></i> <span x-text="form.id ? '儲存變更' : '送出登記'"></span>
                         </button>
                     </div>
                 </div>
@@ -188,58 +214,76 @@
         </div>
 
         <!-- 紀錄列表 -->
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div class="p-4 border-b bg-slate-50 flex justify-between items-center">
-                <h3 class="font-bold text-slate-700">調課紀錄明細</h3>
-                <div class="flex items-center gap-3">
-                    <button @click="clearLocalCache()" class="text-xs text-rose-500 hover:underline">強制清除暫存</button>
-                    <span class="text-xs text-slate-500" x-text="`共 ${records.length} 筆資料`"></span>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <h3 class="font-bold text-slate-800">調課紀錄清單</h3>
+                <div class="flex items-center gap-4">
+                    <button @click="clearLocalCache()" class="text-xs text-rose-500 hover:text-rose-700 transition">清空離線快取</button>
+                    <span class="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full font-semibold" x-text="`${records.length} 筆`"></span>
                 </div>
             </div>
+            
             <div class="overflow-x-auto">
                 <table class="w-full text-left border-collapse text-sm">
                     <thead>
-                        <tr class="border-b bg-slate-100 text-slate-600">
-                            <th class="p-3">申請人 (原課)</th>
-                            <th class="p-3">對調/代課人</th>
-                            <th class="p-3">調課狀態</th>
-                            <th class="p-3 text-right">操作</th>
+                        <tr class="border-b border-slate-100 bg-slate-50 text-slate-500 text-xs uppercase">
+                            <th class="py-3 px-6">原授課人 (申請)</th>
+                            <th class="py-3 px-6">調課對象 (受調)</th>
+                            <th class="py-3 px-6">狀態 (可點擊切換)</th>
+                            <th class="py-3 px-6 text-right">操作</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody class="divide-y divide-slate-100">
                         <template x-for="item in records" :key="item.id">
-                            <tr class="border-b hover:bg-slate-50 transition">
-                                <td class="p-3">
-                                    <div class="font-bold text-slate-800" x-text="item.applicantName"></div>
-                                    <div class="text-xs text-slate-500" x-text="`${item.applicantGrade} / ${item.applicantPeriod} / ${item.applicantSubject}`"></div>
+                            <tr class="hover:bg-slate-50/80 transition">
+                                <!-- 申請人資訊 -->
+                                <td class="py-4 px-6">
+                                    <div class="font-bold text-slate-900 text-base" x-text="item.applicantName"></div>
+                                    <div class="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5">
+                                        <span class="bg-slate-100 px-1.5 py-0.5 rounded font-medium text-slate-600" x-text="item.applicantGrade"></span>
+                                        <span class="text-indigo-600 font-semibold" x-text="`${item.applicantDay || '星期一'} ${item.applicantPeriod}`"></span>
+                                        <span class="text-slate-400">|</span>
+                                        <span x-text="item.applicantSubject"></span>
+                                    </div>
                                 </td>
-                                <td class="p-3">
-                                    <div class="font-bold text-slate-800" x-text="item.respondentName"></div>
-                                    <div class="text-xs text-slate-500" x-text="`${item.respondentGrade} / ${item.respondentPeriod} / ${item.respondentSubject}`"></div>
+                                <!-- 對調人資訊 -->
+                                <td class="py-4 px-6">
+                                    <div class="font-bold text-slate-900 text-base" x-text="item.respondentName"></div>
+                                    <div class="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5">
+                                        <span class="bg-slate-100 px-1.5 py-0.5 rounded font-medium text-slate-600" x-text="item.respondentGrade"></span>
+                                        <span class="text-indigo-600 font-semibold" x-text="`${item.respondentDay || '星期一'} ${item.respondentPeriod}`"></span>
+                                        <span class="text-slate-400">|</span>
+                                        <span x-text="item.respondentSubject"></span>
+                                    </div>
                                 </td>
-                                <td class="p-3">
+                                <!-- 狀態切換選單 -->
+                                <td class="py-4 px-6">
                                     <select 
                                         :value="item.status" 
                                         @change="updateStatus(item.id, $event.target.value)"
-                                        class="px-2 py-1 text-xs font-semibold rounded border"
+                                        class="px-3 py-1 text-xs font-bold rounded-full border shadow-sm cursor-pointer transition focus:ring-0"
                                         :class="{
-                                            'bg-amber-50 text-amber-700 border-amber-200': item.status === '雙方已講好 (待送教務處)',
-                                            'bg-blue-50 text-blue-700 border-blue-200': item.status === '教務處審核中',
-                                            'bg-emerald-50 text-emerald-700 border-emerald-200': item.status === '已完成調課核備'
+                                            'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100': item.status === '雙方已講好 (待送教務處)',
+                                            'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100': item.status === '教務處審核中',
+                                            'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100': item.status === '已完成調課核備'
                                         }">
                                         <option value="雙方已講好 (待送教務處)">雙方已講好 (待送教務處)</option>
                                         <option value="教務處審核中">教務處審核中</option>
                                         <option value="已完成調課核備">已完成調課核備</option>
                                     </select>
                                 </td>
-                                <td class="p-3 text-right space-x-1">
-                                    <button @click="editRecord(item)" class="text-indigo-600 hover:text-indigo-900 p-1"><i class="fa-solid fa-pen"></i></button>
-                                    <button @click="deleteRecord(item.id)" class="text-rose-600 hover:text-rose-900 p-1"><i class="fa-solid fa-trash"></i></button>
+                                <!-- 操作按鈕 -->
+                                <td class="py-4 px-6 text-right space-x-2">
+                                    <button @click="editRecord(item)" title="編輯" class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition inline-flex items-center justify-center"><i class="fa-solid fa-pen text-xs"></i></button>
+                                    <button @click="deleteRecord(item.id)" title="刪除" class="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 transition inline-flex items-center justify-center"><i class="fa-solid fa-trash text-xs"></i></button>
                                 </td>
                             </tr>
                         </template>
                         <tr x-show="records.length === 0">
-                            <td colspan="4" class="p-6 text-center text-slate-400">目前尚無調課紀錄</td>
+                            <td colspan="4" class="py-12 text-center text-slate-400">
+                                <i class="fa-regular fa-folder-open text-3xl mb-2 block text-slate-300"></i>
+                                目前尚無調課紀錄
+                            </td>
                         </tr>
                     </tbody>
                 </table>
@@ -247,22 +291,25 @@
         </div>
     </main>
 
-    <!-- Alpine 邏輯 -->
+    <!-- Alpine.js 邏輯 -->
     <script>
         document.addEventListener('alpine:init', () => {
             Alpine.data('swapApp', () => ({
                 isOnline: false,
                 grades: ['一年級', '二年級', '三年級', '四年級', '五年級', '六年級'],
+                days: ['星期一', '星期二', '星期三', '星期四', '星期五'],
                 periods: ['第一節', '第二節', '第三節', '第四節', '第五節', '第六節', '第七節'],
                 records: [],
                 form: {
                     id: null,
                     applicantName: '',
                     applicantGrade: '一年級',
+                    applicantDay: '星期一',
                     applicantPeriod: '第一節',
                     applicantSubject: '',
                     respondentName: '',
                     respondentGrade: '一年級',
+                    respondentDay: '星期一',
                     respondentPeriod: '第二節',
                     respondentSubject: '',
                     status: '雙方已講好 (待送教務處)'
@@ -302,7 +349,7 @@
                         this.records = cloudRecords;
                         localStorage.setItem('swap_records', JSON.stringify(this.records));
                     }, (err) => {
-                        console.error("Firestore 同步監聽受阻:", err);
+                        console.error("Firestore 同步受阻:", err);
                         this.isOnline = false;
                     });
                 },
@@ -351,11 +398,9 @@
                 async deleteRecord(id) {
                     if (!confirm("確定要刪除這筆紀錄嗎？")) return;
 
-                    // 本機先刪除
                     this.records = this.records.filter(r => r.id !== id);
                     localStorage.setItem('swap_records', JSON.stringify(this.records));
 
-                    // 雲端刪除
                     if (this.isOnline && window.firebaseDB) {
                         try {
                             const { doc, deleteDoc } = window.firestoreUtils;
@@ -368,7 +413,7 @@
                 },
 
                 clearLocalCache() {
-                    if (confirm("這將會清空您瀏覽器內的暫存檔並重新整理頁面，確定嗎？")) {
+                    if (confirm("是否確定清空本地快取並重新載入？")) {
                         localStorage.removeItem('swap_records');
                         location.reload();
                     }
@@ -383,10 +428,12 @@
                         id: null,
                         applicantName: '',
                         applicantGrade: '一年級',
+                        applicantDay: '星期一',
                         applicantPeriod: '第一節',
                         applicantSubject: '',
                         respondentName: '',
                         respondentGrade: '一年級',
+                        respondentDay: '星期一',
                         respondentPeriod: '第二節',
                         respondentSubject: '',
                         status: '雙方已講好 (待送教務處)'
